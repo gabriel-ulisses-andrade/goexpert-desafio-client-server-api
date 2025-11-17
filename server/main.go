@@ -1,55 +1,82 @@
 package main
 
 import (
+	"context"
+	"encoding/json"
 	"io"
 	"log"
 	"net/http"
 	"time"
+
+	"gorm.io/driver/mysql"
+	"gorm.io/gorm"
 )
 
-type ViaCEP struct {
-	Cep         string `json:"cep"`
-	Logradouro  string `json:"logradouro"`
-	Complemento string `json:"complemento"`
-	Unidade     string `json:"unidade"`
-	Bairro      string `json:"bairro"`
-	Localidade  string `json:"localidade"`
-	Uf          string `json:"uf"`
-	Estado      string `json:"estado"`
-	Regiao      string `json:"regiao"`
-	Ibge        string `json:"ibge"`
-	Gia         string `json:"gia"`
-	Ddd         string `json:"ddd"`
-	Siafi       string `json:"siafi"`
+type CotacaoResponse struct {
+	USDBRL Cotacao `json:"USDBRL"`
 }
 
-var timeoutConsultaExterna = time.Millisecond * 2000
-var timeoutEscritaDB = time.Millisecond * 10
+type Cotacao struct {
+	ID         int32  `gorm:"primaryKey;autoIncrement"`
+	Code       string `json:"code"`
+	Codein     string `json:"codein"`
+	Name       string `json:"name"`
+	High       string `json:"high"`
+	Low        string `json:"low"`
+	VarBid     string `json:"varBid"`
+	PctChange  string `json:"pctChange"`
+	Bid        string `json:"bid"`
+	Ask        string `json:"ask"`
+	Timestamp  string `json:"timestamp"`
+	CreateDate string `json:"create_date"`
+}
 
 func raisePanic(err error, throwPanic bool) {
 	if err != nil {
-		log.Println("ERROR - ", time.DateTime, " | ", err)
+		RegisterLog(err.Error())
 		if throwPanic {
 			panic(err)
 		}
 	}
 }
 
+func RegisterLog(message string) {
+	log.Println("LOG - ", message, " | ", time.DateTime)
+}
+
 func InternalServerError(err error, message string, w http.ResponseWriter) {
 	if err != nil {
-		log.Println("ERROR - ", time.DateTime, " | ", err)
+		RegisterLog(err.Error())
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte(message))
 	}
 }
 
 func main() {
-	http.HandleFunc("/cotacao", ConsultaCotacaoUSD)
+	handler := CotacaoHandler{}.Init("root:root@tcp(localhost:3306)/cotacao?charset=utf8mb4&parseTime=True&loc=Local")
+
+	http.HandleFunc("/cotacao", handler.ConsultaCotacaoUSD)
 	http.ListenAndServe(":8080", nil)
 }
 
-func ConsultaCotacaoUSD(w http.ResponseWriter, r *http.Request) {
-	client := http.Client{Timeout: timeoutConsultaExterna}
+type CotacaoHandler struct {
+	DB *gorm.DB
+}
+
+func (c CotacaoHandler) Init(dsn string) CotacaoHandler {
+	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{DefaultContextTimeout: time.Millisecond * 10})
+	raisePanic(err, true)
+	db.AutoMigrate(&Cotacao{})
+	c.DB = db
+	return c
+}
+
+func (c CotacaoHandler) ConsultaCotacaoUSD(w http.ResponseWriter, r *http.Request) {
+	client := http.Client{}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*2000)
+	defer cancel()
+
+	http.NewRequestWithContext(ctx, "GET", "https://economia.awesomeapi.com.br/json/last/USD-BRL", nil)
 
 	request, err := http.NewRequest("GET", "https://economia.awesomeapi.com.br/json/last/USD-BRL", nil)
 	InternalServerError(err, "Failed to create request", w)
@@ -58,10 +85,16 @@ func ConsultaCotacaoUSD(w http.ResponseWriter, r *http.Request) {
 	InternalServerError(err, "Failed to perform request", w)
 
 	defer response.Body.Close()
-
 	content, err := io.ReadAll(response.Body)
 	InternalServerError(err, "Failed to read response body", w)
+
+	var cotacao CotacaoResponse
+	err = json.Unmarshal(content, &cotacao)
+	InternalServerError(err, "Failed to create request", w)
+
+	c.DB.Create(&cotacao.USDBRL)
+
 	w.Header().Add("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	w.Write(content)
+	json.NewEncoder(w).Encode(cotacao.USDBRL)
 }

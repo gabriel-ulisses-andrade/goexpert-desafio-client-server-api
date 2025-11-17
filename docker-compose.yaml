@@ -1,0 +1,13 @@
+version: '3.8'
+
+services:
+  db:
+    image: mysql:8.0
+    container_name: desafio-mysql
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: cotacao
+      MYSQL_PASSWORD: root
+    ports:
+      - "3306:3306" # Map host port 3306 to container port 3306
