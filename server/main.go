@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"time"
 
-	"gorm.io/driver/mysql"
+	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
 
@@ -33,27 +33,27 @@ type Cotacao struct {
 
 func raisePanic(err error, throwPanic bool) {
 	if err != nil {
-		RegisterLog(err.Error())
+		RegistrarLog(err.Error())
 		if throwPanic {
 			panic(err)
 		}
 	}
 }
 
-func RegisterLog(message string) {
+func RegistrarLog(message string) {
 	log.Println("LOG - ", message, " | ", time.DateTime)
 }
 
 func InternalServerError(err error, message string, w http.ResponseWriter) {
 	if err != nil {
-		RegisterLog(err.Error())
+		RegistrarLog(err.Error())
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte(message))
 	}
 }
 
 func main() {
-	handler := CotacaoHandler{}.Init("root:root@tcp(localhost:3306)/cotacao?charset=utf8mb4&parseTime=True&loc=Local")
+	handler := CotacaoHandler{}.Init("cotacao.db")
 
 	http.HandleFunc("/cotacao", handler.ConsultaCotacaoUSD)
 	http.ListenAndServe(":8080", nil)
@@ -64,7 +64,7 @@ type CotacaoHandler struct {
 }
 
 func (c CotacaoHandler) Init(dsn string) CotacaoHandler {
-	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{DefaultContextTimeout: time.Millisecond * 10})
+	db, err := gorm.Open(sqlite.Open(dsn) /*, &gorm.Config{DefaultContextTimeout: time.Millisecond * 10}*/)
 	raisePanic(err, true)
 	db.AutoMigrate(&Cotacao{})
 	c.DB = db
@@ -73,28 +73,40 @@ func (c CotacaoHandler) Init(dsn string) CotacaoHandler {
 
 func (c CotacaoHandler) ConsultaCotacaoUSD(w http.ResponseWriter, r *http.Request) {
 	client := http.Client{}
-	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*2000)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*200)
 	defer cancel()
 
-	http.NewRequestWithContext(ctx, "GET", "https://economia.awesomeapi.com.br/json/last/USD-BRL", nil)
-
-	request, err := http.NewRequest("GET", "https://economia.awesomeapi.com.br/json/last/USD-BRL", nil)
-	InternalServerError(err, "Failed to create request", w)
+	request, err := http.NewRequestWithContext(ctx, "GET", "https://economia.awesomeapi.com.br/json/last/USD-BRL", nil)
+	InternalServerError(err, "Ocorreu um erro ao iniciar a requisição", w)
 
 	response, err := client.Do(request)
-	InternalServerError(err, "Failed to perform request", w)
+	InternalServerError(err, "Ocorreu um erro ao realizar a requisição", w)
 
 	defer response.Body.Close()
 	content, err := io.ReadAll(response.Body)
-	InternalServerError(err, "Failed to read response body", w)
+	InternalServerError(err, "Ocorreu um erro ao ler o conteúdo da resposta", w)
 
 	var cotacao CotacaoResponse
 	err = json.Unmarshal(content, &cotacao)
-	InternalServerError(err, "Failed to create request", w)
+	InternalServerError(err, "Ocorreu um erro ao desserializar o conteúdo da resposta", w)
 
-	c.DB.Create(&cotacao.USDBRL)
+	message := c.SalvarDadosCotacao(cotacao.USDBRL)
+	RegistrarLog(message)
 
 	w.Header().Add("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(cotacao.USDBRL)
+}
+
+func (c CotacaoHandler) SalvarDadosCotacao(cotacao Cotacao) string {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*1)
+	defer cancel()
+
+	c.DB.WithContext(ctx).Create(&cotacao)
+
+	<-ctx.Done()
+	if cotacao.ID != 0 {
+		return "Cotação " + string(cotacao.ID) + " registrada com sucesso!"
+	}
+	return "Não foi possível registrar a cotação. O tempo limite expirou para esta operação"
 }
