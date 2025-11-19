@@ -31,15 +31,23 @@ Os 3 contextos deverão retornar erro nos logs caso o tempo de execução seja i
 
 ## Como Executar o Projeto
 1. Clone o repositório
-`git clone https://github.com/gabriel-ulisses-andrade/goexpert-desafio-client-server-api/tree/main`
-`cd goexpert-desafio-client-server-api`
+```shell 
+git clone https://github.com/gabriel-ulisses-andrade/goexpert-desafio-client-server-api/tree/main
+
+cd goexpert-desafio-client-server-api
+```
 
 2. Execute o servidor
-`cd server`
-`go mod tity` 
-`go run main.go` 
+
+```shell
+cd server
+go mod tity
+go run main.go
+```
 
 3. Execute o client
-`cd client`
-`go mod tity` 
-`go run main.go` 
+```shell
+cd client
+go mod tity
+go run main.go
+```
