@@ -64,7 +64,7 @@ type CotacaoHandler struct {
 }
 
 func (c CotacaoHandler) Init(dsn string) CotacaoHandler {
-	db, err := gorm.Open(sqlite.Open(dsn) /*, &gorm.Config{DefaultContextTimeout: time.Millisecond * 10}*/)
+	db, err := gorm.Open(sqlite.Open(dsn))
 	raisePanic(err, true)
 	db.AutoMigrate(&Cotacao{})
 	c.DB = db
@@ -99,7 +99,7 @@ func (c CotacaoHandler) ConsultaCotacaoUSD(w http.ResponseWriter, r *http.Reques
 }
 
 func (c CotacaoHandler) SalvarDadosCotacao(cotacao Cotacao) string {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*1)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*20)
 	defer cancel()
 
 	c.DB.WithContext(ctx).Create(&cotacao)
