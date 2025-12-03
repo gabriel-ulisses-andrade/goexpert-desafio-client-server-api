@@ -99,7 +99,7 @@ func (c CotacaoHandler) ConsultaCotacaoUSD(w http.ResponseWriter, r *http.Reques
 }
 
 func (c CotacaoHandler) SalvarDadosCotacao(cotacao Cotacao) string {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*20)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*10)
 	defer cancel()
 
 	c.DB.WithContext(ctx).Create(&cotacao)
